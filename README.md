@@ -3,8 +3,8 @@
 Project Name:  sparse-kerkle-tree
 
 [![PyPi](https://img.shields.io/pypi/v/kerkle.svg)](https://pypi.org/project/kerkle/)
-[![GitHub Actions](https://github.com/webOfTrust/kerkle/actions/workflows/python-app-ci.yml/badge.svg)](https://github.com/WebOfTrust/kerkle/actions)
-[![codecov](https://codecov.io/gh/WebOfTrust/kerkle/branch/main/graph/badge.svg?token=FR5CB2TPYG)](https://codecov.io/gh/WebOfTrust/kerkle)
+[![GitHub Actions](https://github.com/webOfTrust/sparse-kerkle-tree/actions/workflows/python-app-ci.yml/badge.svg)](https://github.com/WebOfTrust/sparse-kerkle-tree/actions)
+[![codecov](https://codecov.io/gh/WebOfTrust/sparse-kerkle-tree/branch/main/graph/badge.svg?token=FR5CB2TPYG)](https://codecov.io/gh/WebOfTrust/sparse-kerkle-tree)
 [![https://pypi.org/project/kerkle/](https://img.shields.io/pypi/pyversions/kerkle.svg)](https://pypi.org/project/kerkle/)
 
 ## Installation
