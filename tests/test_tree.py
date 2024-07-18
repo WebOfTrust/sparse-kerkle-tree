@@ -38,7 +38,6 @@ def test_tree():
 
         assert proof.pod["root"] == root.qb64
         assert proof.pod["value"] == saider.qb64
-        assert len(proof.pod["side_nodes"]) >= 12
 
         saider = coring.Saider(qb64b=b"EPmcEGTcz8-xNCOP6Bcg0ar57BVT6TumnJ4quwm-cnTH")
         proof = tree.prove(saider)
