@@ -17,14 +17,14 @@ PLACEHOLDER = bytes(32)
 DEFAULTVALUE = b""
 
 
-def create_leaf(path, leaf_data, code=core.MtrDex.SHA3_256):
-    value = b"".join([LEAF, path, leaf_data])
-    hash = digest(value, code=code)
-    return (hash, value)
+def create_leaf(path, code=core.MtrDex.SHA3_256):
+    value = b"".join([LEAF, path])
+    dig = digest(value, code=code)
+    return dig, value
 
 
 def parse_leaf(data):
-    return (data[1:33], data[33:])
+    return data[1:33]
 
 
 def is_leaf(data):
@@ -33,12 +33,12 @@ def is_leaf(data):
 
 def create_node(left, right, code=core.MtrDex.SHA3_256):
     value = b"".join([NODE, left, right])
-    hash = digest(value, code=code)
-    return hash, value
+    dig = digest(value, code=code)
+    return dig, value
 
 
 def parse_node(data):
-    return (data[1:33], data[33:])
+    return data[1:33], data[33:]
 
 
 def digest(data, code=core.MtrDex.Blake3_256):

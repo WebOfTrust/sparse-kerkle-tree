@@ -1,118 +1,80 @@
+import random
+import secrets
+
+from keri import core
+from keri.app import habbing
+from keri.core import coring, MtrDex
+from keri.help import helping
+from keri.peer import exchanging
+from kerkle.core import storing
 from kerkle.core.treeing import SparseMerkleTree
-from kerkle.core.helping import DEFAULTVALUE, PLACEHOLDER
 from kerkle.core.proofing import verify_proof
 
 
-def test_tree_basics():
-    tree = SparseMerkleTree()
+def test_tree():
+    with habbing.openHby(name="test", temp=True) as hby:
+        hab = hby.makeHab(name="test", transferable=True)
 
-    assert DEFAULTVALUE == tree.get(b"c")
+        make_exns(hab)
+        db = storing.LMDBTreeStore(tid="test", temo=True)
+        store = storing.TreeMemoryStore(db=db)
+        tree = SparseMerkleTree(store=store)
 
-    root1 = tree.update(b"a", b"a1")
-    assert 32 == len(root1)
-    assert root1 != PLACEHOLDER
+        saiders = []
+        for (_,), exn in hby.db.exns.getItemIter():
+            saider = coring.Saider(qb64b=exn.saidb)
+            saiders.append(saider)
+            tree.update(saider)
 
-    assert tree.update(b"b", b"b1")
-    assert tree.update(b"c", b"c1")
-    assert tree.update(b"d", b"d1")
-    assert tree.update(b"e", b"e1")
-    rootn = tree.update(b"f", b"f1")
+        assert len(saiders) == 500
+        assert len(tree.root_as_bytes()) == 32
+        root = core.Matter(raw=tree.root_as_bytes(), code=MtrDex.Blake3_256)
 
-    assert 32 == len(rootn)
-    assert root1 != rootn
+        for i in range(10):
+            saider = random.choice(saiders)
+            proof = tree.prove(saider)
+            assert verify_proof(proof, root.raw, saider) is True
+            assert tree.has(saider) is True
 
-    assert b"a1" == tree.get(b"a")
-    assert b"b1" == tree.get(b"b")
-    assert b"c1" == tree.get(b"c")
-    assert b"d1" == tree.get(b"d")
-    assert b"e1" == tree.get(b"e")
-    assert b"f1" == tree.get(b"f")
-    assert b"" == tree.get(b"nope")
+        assert proof.pod["root"] == root.qb64
+        assert proof.pod["value"] == saider.qb64
+        assert len(proof.pod["side_nodes"]) >= 12
 
-    rootn1 = tree.delete(b"c")
-    assert 32 == len(rootn1)
+        saider = coring.Saider(qb64b=b"EPmcEGTcz8-xNCOP6Bcg0ar57BVT6TumnJ4quwm-cnTH")
+        proof = tree.prove(saider)
+        assert not verify_proof(proof, root.raw, saider)
+        assert not tree.has(saider)
 
-    assert DEFAULTVALUE == tree.get(b"c")
-    assert b"a1" == tree.get(b"a")
-    assert b"b1" == tree.get(b"b")
-    assert b"d1" == tree.get(b"d")
-    assert b"e1" == tree.get(b"e")
-    assert b"f1" == tree.get(b"f")
+        tree.store.save()
+        db.close()
 
-    # has it...
-    assert tree.has(b"e")
+        db = storing.LMDBTreeStore(tid="test", demo=True)
+        store2 = storing.TreeMemoryStore(db=db)
+        tree2 = SparseMerkleTree(store=store)
 
-    # update existing key
-    rootn2 = tree.update(b"b", b"b11")
-    assert 32 == len(rootn2)
-    assert rootn2 != rootn1
-    assert b"b11" == tree.get(b"b")
+        assert tree2.root == tree.root
+        assert tree2.code == tree.code
+        assert store2.nodes == store.nodes
 
-    # test updating a key still allows getting values from old roots
-    rootn3 = tree.update(b"b", b"b111")
-    assert b"b111" == tree.get(b"b")
-    assert rootn3 != rootn2
-
-    # test you can delete a key
-    assert len(tree.delete(b"a")) > 0
-    assert DEFAULTVALUE == tree.get(b"a")
+        saider = random.choice(saiders)
+        proof = tree2.prove(saider)
+        assert verify_proof(proof, root.raw, saider) is True
+        assert tree.has(saider) is True
 
 
-def test_proofs():
-    tree = SparseMerkleTree()
-    assert tree.update(b"b", b"b1")
-    assert tree.update(b"c", b"c1")
-    assert tree.update(b"d", b"d1")
-    assert tree.update(b"e", b"e1")
+def make_exns(hab):
+    for i in range(500):
+        raw = secrets.token_bytes(random.randint(30, 500))
+        diger = coring.Diger(ser=raw, code=MtrDex.Blake3_256)
 
-    assert tree.delete(b"c")
-
-    root = tree.update(b"f", b"f1")
-
-    proof = tree.prove(b"d")
-    assert verify_proof(proof, root, b"d", b"d1")
-
-    proof1 = tree.prove(b"np")
-    assert not verify_proof(proof1, root, b"np", b"np1")
-
-    proof2 = tree.prove(b"c")
-    assert verify_proof(proof2, root, b"c", DEFAULTVALUE)
+        exn, _ = exchanging.exchange(route="/essr/req",
+                                     payload=dict(d=diger.qb64),
+                                     sender=hab.pre,
+                                     recipient="EM1GhHyd3Q7DDQ_U7h2JwwOVJNBfzIL4g1A-1qbx92Td",
+                                     date=helping.nowIso8601())
+        ims = hab.endorse(serder=exn, pipelined=False)
+        hab.psr.parseOne(ims=bytes(ims))
 
 
-def test_bulk():
-    data = make_random_data()
-    tree = SparseMerkleTree()
-    # Add data
-    for k, v in data:
-        assert tree.update(k, v)
-
-    # Check it's there
-    for k, v in data:
-        assert v == tree.get(k)
-
-    # Check proofs
-    root = tree.root
-    for k, v in data:
-        proof = tree.prove(k)
-        assert proof.sanity_check()
-        assert verify_proof(proof, root, k, v)
-
-    # Delete it
-    for k, _ in data:
-        assert tree.delete(k) != None
-
-    # Check random value is deleted
-    assert b"" == tree.get(data[4][0])
 
 
-def make_random_data(size=500):
-    import secrets
-    import random
-
-    return [
-        (
-            secrets.token_bytes(random.randint(10, 30)),
-            secrets.token_bytes(random.randint(30, 500)),
-        )
-        for _ in range(size)
-    ]

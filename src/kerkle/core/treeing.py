@@ -3,10 +3,10 @@
 kerkle.treeing module
 
 """
-from keri.core import MtrDex
+from typing import Sequence
 
-from .proofing import SparseMerkleProof
-from .storing import TreeMapStore, BytesOrNone, TreeMemoryStore
+from keri import core
+
 from .helping import (
     create_node,
     create_leaf,
@@ -15,14 +15,12 @@ from .helping import (
     parse_leaf,
     parse_node,
     is_leaf,
-    digest,
     DEPTH,
     PLACEHOLDER,
     RIGHT,
-    DEFAULTVALUE,
 )
-
-from typing import List, Sequence, Tuple
+from .proofing import SparseMerkleProof, verify_proof
+from .storing import TreeMapStore, BytesOrNone, TreeMemoryStore
 
 # Errors
 KeyAlreadyEmpty = 1
@@ -30,18 +28,25 @@ InvalidKey = 2
 
 
 class SparseMerkleTree:
-    root: bytes
     store: TreeMapStore
 
     def __init__(
             self,
-            store: TreeMapStore = TreeMemoryStore(),
-            root=PLACEHOLDER,
-            code=MtrDex.Blake3_256
+            store: TreeMapStore = TreeMemoryStore(db=None),
     ):
-        self.root = root
         self.store = store
-        self.code = code
+
+    @property
+    def root(self):
+        return self.store.get_root()
+
+    @root.setter
+    def root(self, root):
+        self.store.set_root(root, self.code)
+
+    @property
+    def code(self):
+        return self.store.get_code()
 
     def root_as_bytes(self) -> bytes:
         return self.root
@@ -49,23 +54,9 @@ class SparseMerkleTree:
     def root_as_hex(self) -> str:
         return "0x{}".format(self.root.hex())
 
-    def get(self, key: bytes) -> bytes:
-        """
-        Get a value for the given key using the current root.
-        """
-        if self.root == PLACEHOLDER:
-            return DEFAULTVALUE
-
-        path = digest(key, code=self.code)
-        val = self.store.get_value(path)
-        if not val:
-            return DEFAULTVALUE
-
-        return val
-
-    def has(self, key):
-        result = self.get(key)
-        return result != DEFAULTVALUE
+    def has(self, saider):
+        proof = self.prove(saider)
+        return verify_proof(proof, self.root, saider)
 
     def update(self, saider):
         """
@@ -74,52 +65,53 @@ class SparseMerkleTree:
         if saider.code != self.code:
             raise ValueError(f"code mismatch, using SAID with {saider.code} for tree with {self.code}")
 
-        new_root = self.update_for_root(saider.qb64b, saider.qb64b, self.root)
+        new_root = self.update_for_root(saider, self.root)
         self.root = new_root
         return new_root
 
-    def update_for_root(self, key, value, root) -> BytesOrNone:
-        path = digest(key, code=self.code)
+    def update_for_root(self, saider, root) -> BytesOrNone:
+        path = saider.raw
+        side_nodes, path_nodes, old_leafdata, _sibdata = self._get_sidenodes(
+            path, root
+        )
+
+        return self._update_with_sidenodes(
+            path, side_nodes, path_nodes, old_leafdata
+        )
+
+    def delete(self, saider):
+        return self.delete_for_root(saider, self.root)
+
+    def delete_for_root(self, saider, root):
+        path = saider.raw
         side_nodes, path_nodes, old_leafdata, _sibdata = self._get_sidenodes(
             path, root
         )
 
         # If the value is the None (defaultValue) then do a delete for the key
-        if value == DEFAULTVALUE:
-            new_root, err = self._delete_with_sidenodes(
-                path, side_nodes, path_nodes, old_leafdata
-            )
-            if err and err == KeyAlreadyEmpty:
-                return root
-            if not self.store.delete_value(path):
-                return None
-            return new_root
-        else:
-            return self._update_with_sidenodes(
-                path, value, side_nodes, path_nodes, old_leafdata
-            )
+        new_root, err = self._delete_with_sidenodes(
+            path, side_nodes, path_nodes, old_leafdata
+        )
+        if err and err == KeyAlreadyEmpty:
+            return root
 
-    def delete(self, key):
-        return self.update(key)
+        return new_root
 
-    def delete_for_root(self, key, root):
-        return self.update_for_root(key, DEFAULTVALUE, root)
+    def prove(self, saider):
+        return self.prove_for_root(saider, self.root)
 
-    def prove(self, key):
-        return self.prove_for_root(key, self.root)
+    def prove_for_root(self, saider, root):
+        return self._proof_for_root(saider, root, False)
 
-    def prove_for_root(self, key, root):
-        return self._proof_for_root(key, root, False)
+    def prove_updatable(self, saider):
+        return self.prove_updatable_for_root(saider, self.root)
 
-    def prove_updatable(self, key):
-        return self.prove_updatable(key, self.root)
-
-    def prove_updatable_for_root(self, key, root):
-        return self._proof_for_root(key, root, True)
+    def prove_updatable_for_root(self, saider, root):
+        return self._proof_for_root(saider, root, True)
 
     def _get_sidenodes(
             self, path: bytes, root: bytes, with_sibling_data=False
-    ) -> Tuple[List[bytes], List[bytes], bytes, bytes]:
+    ):
         """
         Walk the tree down from the root gathering neighbor nodes
         on the way to the leaf for the given key (path)
@@ -127,19 +119,17 @@ class SparseMerkleTree:
             returns:
         """
         side_nodes = []
-        path_nodes = []
-        path_nodes.append(root)
+        path_nodes = [root]
 
         if root == PLACEHOLDER:
-            return (side_nodes, path_nodes, None, None)
+            return side_nodes, path_nodes, None, None
 
         current_data = self.store.get_node(root)
-        if current_data == None:
-            return (None, None, None, None)
+        if current_data is None:
+            return None, None, None, None
         elif is_leaf(current_data):
-            return (side_nodes, path_nodes, current_data, None)
+            return side_nodes, path_nodes, current_data, None
 
-        node_hash = None
         side_node = None
         sibdata = None
         for i in range(DEPTH):
@@ -159,38 +149,34 @@ class SparseMerkleTree:
                 break
 
             current_data = self.store.get_node(node_hash)
-            if current_data == None:
-                return (None, None, None, None)
+            if current_data is None:
+                return None, None, None, None
             elif is_leaf(current_data):
                 break
 
         if with_sibling_data:
             sibdata = self.store.get_node(side_node)
             if not sibdata:
-                return (None, None, None, None)
+                return None, None, None, None
 
-        return (side_nodes[::-1], path_nodes[::-1], current_data, sibdata)
+        return side_nodes[::-1], path_nodes[::-1], current_data, sibdata
 
     def _update_with_sidenodes(
             self,
             path: bytes,
-            value: bytes,
             side_nodes: Sequence[bytes],
             path_nodes: Sequence[bytes],
             old_leafdata: bytes,
     ) -> bytes:
-        value_hash = digest(value, code=self.code)
-        current_hash, current_data = create_leaf(path, value_hash)
+        current_hash, current_data = create_leaf(path)
 
         self.store.set_node(current_hash, current_data)  # = current_data
         current_data = current_hash
 
-        common_prefix_count = 0
-        old_value_hash = None
         if path_nodes[0] == PLACEHOLDER:
             common_prefix_count = DEPTH
         else:
-            actual_path, old_value_hash = parse_leaf(old_leafdata)
+            actual_path = parse_leaf(old_leafdata)
             common_prefix_count = count_common_prefix(path, actual_path)
 
         if common_prefix_count != DEPTH:
@@ -205,19 +191,19 @@ class SparseMerkleTree:
 
             self.store.set_node(current_hash, current_data)  # = current_data
             current_data = current_hash
-        elif old_value_hash != None:
-            if old_value_hash == value_hash:
-                return self.root
 
-            self.store.delete_node(path_nodes[0])
-            self.store.delete_value(path)
+        # elif old_value_hash is not None:
+        #     if old_value_hash == value_hash:
+        #         return self.root
+        #
+        #     self.store.delete_node(path_nodes[0])
+        #     self.store.delete_value(path)
 
         for val in path_nodes[1:]:
             self.store.delete_node(val)
 
         offset = DEPTH - len(side_nodes)
         for i in range(DEPTH):
-            side_node = bytes(32)
             if (i - offset) < 0:
                 if (
                         common_prefix_count != DEPTH
@@ -241,34 +227,33 @@ class SparseMerkleTree:
             self.store.set_node(current_hash, current_data)  # = current_data
             current_data = current_hash
 
-        self.store.set_value(path, value)
         return current_hash
 
     def _delete_with_sidenodes(self, path, sidenodes, path_nodes, old_leafdata):
         if path_nodes[0] == PLACEHOLDER:
             # This key is already empty as it is a placeholder; return an error
-            return (None, KeyAlreadyEmpty)
+            return None, KeyAlreadyEmpty
 
         if parse_leaf(old_leafdata)[0] != path:
             # This key is already empty as a different key was found its place; return an error.
-            return (None, KeyAlreadyEmpty)
+            return None, KeyAlreadyEmpty
 
         # Remove all orphans
         for val in path_nodes:
             if not self.store.delete_node(val):
-                return (None, None)
+                return None, None
 
         current_hash = None
         current_data = None
         non_placeholder_reached = False
         for i, sn in enumerate(sidenodes):
-            if sn == None:
+            if sn is None:
                 continue
 
-            if current_data == None:
+            if current_data is None:
                 side_node_value = self.store.get_node(sn)
-                if side_node_value == None:
-                    return (None, InvalidKey)
+                if side_node_value is None:
+                    return None, InvalidKey
                 if is_leaf(side_node_value):
                     current_hash = sn
                     current_data = sn
@@ -290,28 +275,28 @@ class SparseMerkleTree:
             self.store.set_node(current_hash, current_data)  # = current_data
             current_data = current_hash
 
-        if current_hash == None:
+        if current_hash is None:
             current_hash = PLACEHOLDER
 
-        return (current_hash, None)
+        return current_hash, None
 
-    def _proof_for_root(self, key, root, is_updatable):
-        path = digest(key, code=self.code)
-        side_nodes, old_leafhash, old_leafdata, sibdata = self._get_sidenodes(
+    def _proof_for_root(self, saider, root, is_updatable):
+        path = saider.raw
+        side_nodes, path_nodes, old_leafdata, sibdata = self._get_sidenodes(
             path, root, is_updatable
         )
 
         non_empty_sides = []
         for sn in side_nodes:
-            if sn != None:
+            if sn is not None:
                 non_empty_sides.append(sn)
 
         non_membership_leafdata = None
-        if old_leafhash != PLACEHOLDER:
-            actual_path, _ = parse_leaf(old_leafdata)
+        if old_leafdata and old_leafdata != PLACEHOLDER:
+            actual_path = parse_leaf(old_leafdata)
             if path != actual_path:
                 non_membership_leafdata = old_leafdata
 
         return SparseMerkleProof(
-            non_empty_sides, non_membership_leafdata, sibdata
+            core.Matter(raw=root, code=self.code), saider, non_empty_sides, non_membership_leafdata, sibdata
         )

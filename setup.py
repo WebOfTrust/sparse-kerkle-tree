@@ -80,13 +80,7 @@ setup(
         'keri>=1.2.0-dev10',
         'lmdb>=1.4.1',
         'pysodium>=0.7.17',
-        'blake3>=0.4.1',
-        'msgpack>=1.0.8',
-        'cbor2>=5.6.2',
-        'multidict>=6.0.5',
-        'ordered-set>=4.1.0',
-        'hio>=0.6.13',
-        'cryptography>=42.0.5'
+        'blake3>=0.4.1'
     ],
     extras_require={
     },
