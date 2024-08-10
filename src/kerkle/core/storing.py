@@ -161,8 +161,6 @@ class LMDBTreeStore(dbing.LMDBer):
 
 
 class TreeMemoryStore(TreeMapStore):
-    root: core.Matter
-    nodes: dict
 
     def __init__(self, db: Union[LMDBTreeStore, None], code=core.MtrDex.Blake3_256):
         self.root = core.Matter(raw=PLACEHOLDER, code=code)

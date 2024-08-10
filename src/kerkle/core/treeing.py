@@ -4,6 +4,7 @@ kerkle.treeing module
 
 """
 from typing import Sequence
+from typing import Union
 
 from keri import core
 
@@ -30,11 +31,8 @@ InvalidKey = 2
 class SparseMerkleTree:
     store: TreeMapStore
 
-    def __init__(
-            self,
-            store: TreeMapStore = TreeMemoryStore(db=None),
-    ):
-        self.store = store
+    def __init__(self, store: Union[TreeMapStore, None] = None):
+        self.store = store if store is not None else TreeMemoryStore(db=None)
 
     @property
     def root(self):
