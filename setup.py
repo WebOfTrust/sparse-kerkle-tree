@@ -38,7 +38,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='kerkle',
-    version='0.0.2',  # also change in src/keri/__init__.py
+    version='0.0.3',  # also change in src/keri/__init__.py
     license='Apache Software License 2.0',
     description='A KERI Event Sparse Merkle Tree',
     long_description="Kerkle",
