@@ -3,9 +3,12 @@
 kerkle.helping module
 
 """
+import hashlib
 
+import blake3
 from keri import core
-from keri.core import coring
+from keri.core import MtrDex
+from keri.core.coring import Digestage
 
 LEAF = b"\x00"
 NODE = b"\x01"
@@ -15,6 +18,18 @@ DEPTH = KEYSIZE * 8
 RIGHT = 1
 PLACEHOLDER = bytes(32)
 DEFAULTVALUE = b""
+
+Digests = {
+    MtrDex.Blake3_256: Digestage(klas=blake3.blake3, size=None, length=None),
+    MtrDex.Blake2b_256: Digestage(klas=hashlib.blake2b, size=32, length=None),
+    MtrDex.Blake2s_256: Digestage(klas=hashlib.blake2s, size=None, length=None),
+    MtrDex.SHA3_256: Digestage(klas=hashlib.sha3_256, size=None, length=None),
+    MtrDex.SHA2_256: Digestage(klas=hashlib.sha256, size=None, length=None),
+    MtrDex.Blake3_512: Digestage(klas=blake3.blake3, size=None, length=64),
+    MtrDex.Blake2b_512: Digestage(klas=hashlib.blake2b, size=None, length=None),
+    MtrDex.SHA3_512: Digestage(klas=hashlib.sha3_512, size=None, length=None),
+    MtrDex.SHA2_512: Digestage(klas=hashlib.sha512, size=None, length=None),
+}
 
 
 def create_leaf(path, code=core.MtrDex.SHA3_256):
@@ -44,12 +59,12 @@ def parse_node(data):
 def digest(data, code=core.MtrDex.Blake3_256):
     # we have to create a new instance has hashlib doesn't
     # have a 'reset' for updates
-    if code not in core.DigDex or code not in coring.Saider.Digests:
+    if code not in core.DigDex:
         raise ValueError("Unsupported digest code = {}.".format(code))
 
     # string now has
     # correct size
-    klas, size, length = coring.Saider.Digests[code]
+    klas, size, length = Digests[code]
     # sad as 'v' verision string then use its kind otherwise passed in kind
     ckwa = dict()  # class keyword args
     if size:

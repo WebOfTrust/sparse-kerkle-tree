@@ -77,7 +77,7 @@ setup(
     ],
     python_requires='>=3.12.2',
     install_requires=[
-        'keri>=1.2.0-dev10',
+        'keri>=1.2.0-rc1',
         'lmdb>=1.4.1',
         'pysodium>=0.7.17',
         'blake3>=0.4.1'
